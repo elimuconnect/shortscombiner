@@ -1,20 +1,41 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Shorts Combiner</title>
-<link rel="stylesheet" href="style.css">
-</head>
-<body>
-<h1>Shorts Combiner — Merge multiple shorts into one</h1>
+const fileInput = document.getElementById("fileInput");
+const combineBtn = document.getElementById("combineBtn");
+const log = document.getElementById("log");
+const result = document.getElementById("result");
 
-<input type="file" id="fileInput" multiple accept="video/*">
-<button id="combineBtn">Combine Videos</button>
+combineBtn.onclick = async () => {
+  const files = fileInput.files;
+  if (!files.length) {
+    alert("Please select at least one video to combine!");
+    return;
+  }
 
-<div id="log"></div>
-<div id="result"></div>
+  log.innerText = "⏳ Uploading and combining videos...";
+  result.innerHTML = "";
 
-<script src="app.js"></script>
-</body>
-</html>
+  const formData = new FormData();
+  for (let file of files) {
+    formData.append("videos", file);
+  }
+
+  try {
+    const res = await fetch("/combine", { method: "POST", body: formData });
+    if (!res.ok) throw new Error(`Server responded with ${res.status}`);
+
+    const blob = await res.blob();
+    const videoUrl = URL.createObjectURL(blob);
+
+    log.innerText = "✅ Done! Combined video ready below.";
+    result.innerHTML = `
+      <video controls style="width:100%;max-width:480px;border-radius:10px;margin-top:10px">
+        <source src="${videoUrl}" type="video/mp4">
+      </video>
+      <br>
+      <a href="${videoUrl}" download="combined.mp4">⬇️ Download Combined Video</a>
+    `;
+  } catch (err) {
+    console.error(err);
+    log.innerText = "❌ Error combining videos: " + err.message;
+  }
+};
+
