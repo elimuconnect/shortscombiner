@@ -1,10 +1,15 @@
 import express from "express";
 import multer from "multer";
 import ffmpeg from "fluent-ffmpeg";
+import ffmpegPath from "ffmpeg-static";
 import fs from "fs";
 import path from "path";
+import cors from "cors";
 
-// Create uploads folders if missing
+// Set ffmpeg path
+ffmpeg.setFfmpegPath(ffmpegPath);
+
+// Create upload folders if missing
 const UPLOADS_DIR = path.resolve("./uploads");
 const TMP_DIR = path.join(UPLOADS_DIR, "tmp");
 
@@ -12,15 +17,21 @@ if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR);
 if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR);
 
 const app = express();
-const upload = multer({ dest: UPLOADS_DIR });
 const PORT = process.env.PORT || 10000;
 
-// Serve static frontend from root folder
+// Enable CORS
+app.use(cors());
+
+// Serve static frontend
 app.use(express.static(path.resolve("./")));
 
-// API endpoint to combine videos
+// Multer setup
+const upload = multer({ dest: UPLOADS_DIR });
+
+// Combine videos endpoint
 app.post("/combine", upload.array("videos"), (req, res) => {
-  if (!req.files || req.files.length === 0) return res.status(400).send("No files uploaded");
+  if (!req.files || req.files.length === 0)
+    return res.status(400).send("No files uploaded");
 
   const outputPath = path.join(UPLOADS_DIR, `combined_${Date.now()}.mp4`);
   const command = ffmpeg();
@@ -30,14 +41,12 @@ app.post("/combine", upload.array("videos"), (req, res) => {
   command
     .on("error", err => {
       console.error("FFmpeg error:", err);
-      // Clean up uploaded files on error
       req.files.forEach(f => fs.unlinkSync(f.path));
       res.status(500).send("Failed to combine videos");
     })
     .on("end", () => {
-      res.download(outputPath, err => {
-        if (err) console.error("Download error:", err);
-        // Clean up output and uploaded files
+      res.sendFile(outputPath, err => {
+        if (err) console.error(err);
         if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
         req.files.forEach(f => fs.unlinkSync(f.path));
       });
@@ -45,7 +54,7 @@ app.post("/combine", upload.array("videos"), (req, res) => {
     .mergeToFile(outputPath, TMP_DIR);
 });
 
-// Fallback for all other routes: serve index.html
+// Fallback to index.html
 app.get("*", (req, res) => {
   res.sendFile(path.resolve("./index.html"));
 });
