@@ -6,7 +6,7 @@ const result = document.getElementById("result");
 combineBtn.onclick = async () => {
   const files = fileInput.files;
   if (!files.length) {
-    alert("Please select at least one video to combine!");
+    alert("Please select at least one video!");
     return;
   }
 
@@ -14,17 +14,10 @@ combineBtn.onclick = async () => {
   result.innerHTML = "";
 
   const formData = new FormData();
-  for (let file of files) {
-    formData.append("videos", file);
-  }
+  for (let file of files) formData.append("videos", file);
 
   try {
-    // 🔗 Send to your Render backend
-    const res = await fetch("https://shortscombiner.onrender.com/combine", {
-      method: "POST",
-      body: formData,
-    });
-
+    const res = await fetch("/combine", { method: "POST", body: formData });
     if (!res.ok) throw new Error(`Server responded with ${res.status}`);
 
     const blob = await res.blob();
