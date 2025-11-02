@@ -22,9 +22,6 @@ const PORT = process.env.PORT || 10000;
 // Enable CORS
 app.use(cors());
 
-// Serve static frontend
-app.use(express.static(path.resolve("./")));
-
 // Multer setup
 const upload = multer({ dest: UPLOADS_DIR });
 
@@ -35,7 +32,6 @@ app.post("/combine", upload.array("videos"), (req, res) => {
 
   const outputPath = path.join(UPLOADS_DIR, `combined_${Date.now()}.mp4`);
   const command = ffmpeg();
-
   req.files.forEach(file => command.input(file.path));
 
   command
@@ -52,11 +48,6 @@ app.post("/combine", upload.array("videos"), (req, res) => {
       });
     })
     .mergeToFile(outputPath, TMP_DIR);
-});
-
-// Fallback to index.html
-app.get("*", (req, res) => {
-  res.sendFile(path.resolve("./index.html"));
 });
 
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
