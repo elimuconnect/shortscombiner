@@ -1,54 +1,49 @@
-const express = require('express');
-const multer = require('multer');
-const ffmpeg = require('fluent-ffmpeg');
-const fs = require('fs');
-const path = require('path');
+import express from "express";
+import multer from "multer";
+import ffmpeg from "fluent-ffmpeg";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const upload = multer({ dest: "uploads/" });
 
-// Serve static frontend
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, "public")));
 
-// Upload folder
-const upload = multer({ dest: 'uploads/' });
-
-// Handle file uploads
-app.post('/combine', upload.array('videos', 100), async (req, res) => {
-  const files = req.files;
-  if (!files || files.length === 0) return res.status(400).send('No files uploaded');
-
-  const outputName = `combined_${Date.now()}.mp4`;
-  const outputPath = path.join(__dirname, 'public', outputName);
-
+app.post("/combine", upload.array("videos", 100), async (req, res) => {
   try {
-    // Create a text file for ffmpeg concat
-    const concatList = files.map(f => `file '${f.path}'`).join('\n');
-    const listPath = path.join(__dirname, 'uploads', 'list.txt');
-    fs.writeFileSync(listPath, concatList);
+    const files = req.files.map(f => path.resolve(f.path));
+    const listFile = "uploads/list.txt";
+    fs.writeFileSync(listFile, files.map(f => `file '${f}'`).join("\n"));
 
-    // Run ffmpeg concat
+    const outputPath = `uploads/combined_${Date.now()}.mp4`;
+
     ffmpeg()
-      .input(listPath)
-      .inputOptions(['-f concat', '-safe 0'])
-      .outputOptions(['-c copy'])
-      .output(outputPath)
-      .on('end', () => {
-        // Cleanup uploaded files
-        files.forEach(f => fs.unlinkSync(f.path));
-        fs.unlinkSync(listPath);
-
-        res.json({ url: `/${outputName}` });
+      .input(listFile)
+      .inputOptions(["-f concat", "-safe 0"])
+      .outputOptions(["-c copy"])
+      .save(outputPath)
+      .on("end", () => {
+        res.download(outputPath, err => {
+          if (err) console.error(err);
+          // cleanup
+          files.forEach(f => fs.unlinkSync(f));
+          fs.unlinkSync(listFile);
+          fs.unlinkSync(outputPath);
+        });
       })
-      .on('error', (err) => {
+      .on("error", err => {
         console.error(err);
-        res.status(500).send('Error combining videos');
-      })
-      .run();
+        res.status(500).send("Error combining videos.");
+      });
   } catch (err) {
     console.error(err);
-    res.status(500).send('Server error');
+    res.status(500).send("Server error.");
   }
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
