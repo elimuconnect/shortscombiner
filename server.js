@@ -6,50 +6,37 @@ import path from "path";
 
 const app = express();
 const upload = multer({ dest: "uploads/" });
-const PORT = process.env.PORT || 10000;
-
-// Ensure folders exist
-fs.mkdirSync("uploads", { recursive: true });
-fs.mkdirSync("merged", { recursive: true });
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
-app.use(express.static("public"));
 
-// Upload endpoint
+// Ensure uploads folder exists
+if (!fs.existsSync("uploads")) fs.mkdirSync("uploads");
+
+// 🔹 Upload short
 app.post("/upload", upload.single("video"), (req, res) => {
-  console.log("📥 Uploaded:", req.file.originalname);
-  res.json({ success: true, filename: req.file.filename });
+  if (!req.file) return res.status(400).send("No file uploaded.");
+  res.json({ filename: req.file.filename });
 });
 
-// Merge endpoint
+// 🔹 Merge shorts
 app.post("/merge", async (req, res) => {
-  try {
-    const { order } = req.body; // optional: order of files
-    const files = order && Array.isArray(order)
-      ? order
-      : fs.readdirSync("uploads").filter(f => f.endsWith(".webm") || f.endsWith(".mp4"));
+  const { files } = req.body;
+  if (!files || !files.length) return res.status(400).send("No files provided.");
 
-    const listPath = "filelist.txt";
-    const listContent = files.map(f => `file '${path.join("uploads", f)}'`).join("\n");
-    fs.writeFileSync(listPath, listContent);
+  const listFile = "uploads/list.txt";
+  const content = files.map(f => `file '${path.join("uploads", f)}'`).join("\n");
+  fs.writeFileSync(listFile, content);
 
-    const outputFile = `merged/final_${Date.now()}.mp4`;
-    const command = `ffmpeg -f concat -safe 0 -i ${listPath} -c copy ${outputFile}`;
-
-    console.log("🔧 Running:", command);
-    await new Promise((resolve, reject) => {
-      exec(command, (err, stdout, stderr) => {
-        if (err) return reject(err);
-        console.log("✅ Merge complete:", outputFile);
-        resolve();
-      });
-    });
-
-    res.download(outputFile, "final_video.mp4");
-  } catch (err) {
-    console.error("❌ Merge failed:", err);
-    res.status(500).json({ success: false, error: err.message });
-  }
+  const output = `uploads/final_${Date.now()}.mp4`;
+  exec(`ffmpeg -f concat -safe 0 -i ${listFile} -c copy ${output}`, (err) => {
+    if (err) {
+      console.error(err);
+      res.status(500).send("Merge failed.");
+    } else {
+      res.download(output);
+    }
+  });
 });
 
-app.listen(PORT, () => console.log(`🚀 Shorts backend running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
