@@ -205,22 +205,33 @@
     const BACKEND_URL = "https://shortscombiner.onrender.com/";
 
     async function uploadShort(blob) {
-      try {
-        const formData = new FormData();
-        formData.append("video", blob, `short_${Date.now()}.webm`);
-        const res = await fetch(`${BACKEND_URL}upload`, { method: "POST", body: formData });
+  try {
+    const formData = new FormData();
+    formData.append("video", blob, `short_${Date.now()}.webm`);
+    const res = await fetch(`${BACKEND_URL}upload`, { method: "POST", body: formData });
 
+    const data = await res.json();
 
-        const data = await res.json();
-        let shorts = JSON.parse(localStorage.getItem("shorts") || "[]");
-        shorts.push(data.filename);
-        localStorage.setItem("shorts", JSON.stringify(shorts));
-        progressStatusEl.textContent = `✅ Uploaded: ${data.filename}`;
-      } catch (e) {
-        console.error("Upload failed:", e);
-        progressStatusEl.textContent = "❌ Upload failed. Try again.";
-      }
+    let shorts = JSON.parse(localStorage.getItem("shorts") || "[]");
+    shorts.push(data.filename);
+    localStorage.setItem("shorts", JSON.stringify(shorts));
+
+    progressStatusEl.textContent = `✅ Uploaded: ${data.filename}`;
+
+    // 🔹 Automatically start the next short after upload
+    if (typeof prepareScene === "function") {
+      setTimeout(() => {
+        progressStatusEl.textContent = "🎬 Starting next short...";
+        prepareScene();
+      }, 1500); // Wait 1.5s before next one
     }
+
+  } catch (e) {
+    console.error("Upload failed:", e);
+    progressStatusEl.textContent = "❌ Upload failed. Try again.";
+  }
+}
+
 
     async function mergeAllShorts() {
       const shorts = JSON.parse(localStorage.getItem("shorts") || "[]");
