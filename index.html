@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Video Compilation Recorder</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shorts Combiner — Render Edition</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     .portrait-container {
@@ -29,8 +29,8 @@
 
 <body class="bg-gray-50 min-h-screen flex items-center justify-center p-4 font-sans">
   <div class="w-full max-w-xl mx-auto">
-    <h1 class="text-3xl font-bold text-center text-gray-800 mb-2">Shorts Compilation Tool</h1>
-    <p class="text-center text-sm text-gray-600 mb-6">Upload multiple short clips to compile and record into one continuous video.</p>
+    <h1 class="text-3xl font-bold text-center text-gray-800 mb-2">Shorts Combiner • Render Edition</h1>
+    <p class="text-center text-sm text-gray-600 mb-6">Upload multiple short clips, record continuously, and auto-save to Render backend.</p>
 
     <div class="bg-white p-6 rounded-xl shadow-lg mb-6 flex flex-col space-y-4">
       <label class="block text-sm font-medium text-gray-700">1. Select Short Clips (MP4/WebM)</label>
@@ -68,6 +68,7 @@
   </div>
 
   <script>
+    // --- Core Elements ---
     const videoFilesInput = document.getElementById('videoFiles');
     const videoPlayer = document.getElementById('videoPlayer');
     const recordBtn = document.getElementById('recordBtn');
@@ -78,232 +79,130 @@
     const downloadLink = document.getElementById('downloadLink');
     const recordingOverlay = document.getElementById('recordingOverlay');
 
-    let videoQueue = [];
-    let currentClipIndex = 0;
-    let mediaRecorder = null;
-    let recordedChunks = [];
-    let totalDuration = 0;
-    let recordingInProgress = false;
-    let currentBlobUrl = null;
-    let recordingStream = null;
+    let videoQueue = [], currentClipIndex = 0, mediaRecorder = null;
+    let recordedChunks = [], totalDuration = 0;
+    let recordingInProgress = false, currentBlobUrl = null, recordingStream = null;
 
-    function formatDuration(seconds) {
-      const min = Math.floor(seconds / 60);
-      const sec = Math.floor(seconds % 60);
-      return `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+    function formatDuration(s) {
+      const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+      return `${m.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`;
     }
 
     function finishLoadingQueue() {
       const totalStr = formatDuration(totalDuration);
       clipListEl.insertAdjacentHTML('beforeend',
         `<div class="mt-2 pt-2 border-t font-semibold flex justify-between"><span>Total Clips: ${videoQueue.length}</span><span>Total Duration: ${totalStr}</span></div>`);
-      recordBtn.disabled = videoQueue.length === 0 || totalDuration === 0;
-      statusEl.textContent = totalDuration > 0 ? `Ready to record ${videoQueue.length} clips.` : `Error loading clips.`;
+      recordBtn.disabled = !videoQueue.length || totalDuration === 0;
+      statusEl.textContent = totalDuration ? `Ready to record ${videoQueue.length} clips.` : `Error loading clips.`;
       statusOverlay.style.opacity = '1';
     }
 
-    videoFilesInput.addEventListener('change', (e) => {
+    videoFilesInput.addEventListener('change', e => {
       videoQueue = Array.from(e.target.files);
-      currentClipIndex = 0;
-      totalDuration = 0;
-      clipListEl.innerHTML = '';
-
-      if (!videoQueue.length) {
-        clipListEl.textContent = 'No clips loaded.';
-        recordBtn.disabled = true;
-        return;
-      }
-
-      statusEl.textContent = 'Analyzing clip durations...';
-      statusOverlay.style.opacity = '1';
-
+      currentClipIndex = 0; totalDuration = 0; clipListEl.innerHTML = '';
+      if (!videoQueue.length) { clipListEl.textContent = 'No clips loaded.'; recordBtn.disabled = true; return; }
+      statusEl.textContent = 'Analyzing clip durations...'; statusOverlay.style.opacity = '1';
       let loadCount = 0;
-      videoQueue.forEach((file, i) => {
+      videoQueue.forEach((f,i) => {
         const li = document.createElement('div');
         li.id = `clip-${i}`;
         li.className = 'flex justify-between items-center p-2 rounded';
-        li.innerHTML = `<span>${i + 1}. ${file.name}</span><span class="text-xs font-mono duration-info text-gray-400">Loading...</span>`;
+        li.innerHTML = `<span>${i+1}. ${f.name}</span><span class="text-xs font-mono text-gray-400">Loading...</span>`;
         clipListEl.appendChild(li);
-
-        const tempVideo = document.createElement('video');
-        tempVideo.muted = true;
-        tempVideo.onloadedmetadata = () => {
-          const dur = tempVideo.duration;
-          if (isFinite(dur)) {
-            totalDuration += dur;
-            li.querySelector('.duration-info').textContent = formatDuration(dur);
-          } else li.querySelector('.duration-info').textContent = 'Unknown';
+        const temp = document.createElement('video'); temp.muted = true;
+        temp.onloadedmetadata = () => {
+          const dur = temp.duration;
+          totalDuration += isFinite(dur) ? dur : 0;
+          li.lastChild.textContent = isFinite(dur) ? formatDuration(dur) : 'Unknown';
           if (++loadCount === videoQueue.length) finishLoadingQueue();
         };
-        tempVideo.onerror = () => {
-          li.querySelector('.duration-info').textContent = 'Error';
-          if (++loadCount === videoQueue.length) finishLoadingQueue();
-        };
-        tempVideo.src = URL.createObjectURL(file);
+        temp.onerror = () => { li.lastChild.textContent = 'Error'; if (++loadCount === videoQueue.length) finishLoadingQueue(); };
+        temp.src = URL.createObjectURL(f);
       });
     });
 
-    function playNextClip(isInitial = false) {
-      if (currentClipIndex >= videoQueue.length) {
-        setTimeout(() => stopRecording(), 800);
-        return;
-      }
-
+    function playNextClip(initial=false) {
+      if (currentClipIndex >= videoQueue.length) { setTimeout(stopRecording, 800); return; }
       videoPlayer.style.opacity = '0';
-      const clipFile = videoQueue[currentClipIndex];
-      statusEl.textContent = `Loading Clip ${currentClipIndex + 1}...`;
+      const clip = videoQueue[currentClipIndex];
+      statusEl.textContent = `Loading Clip ${currentClipIndex+1}...`;
       statusOverlay.style.opacity = '1';
-      progressStatusEl.textContent = `Recording | Clip ${currentClipIndex + 1}: ${clipFile.name}`;
-      document.querySelectorAll('#clipList > div').forEach(el => el.classList.remove('bg-indigo-100'));
-      const currentClipEl = document.getElementById(`clip-${currentClipIndex}`);
-      if (currentClipEl) currentClipEl.classList.add('bg-indigo-100');
-
-      if (currentBlobUrl) {
-        URL.revokeObjectURL(currentBlobUrl);
-        videoPlayer.src = '';
-        currentBlobUrl = null;
-      }
-
-      currentBlobUrl = URL.createObjectURL(clipFile);
+      progressStatusEl.textContent = `Recording | Clip ${currentClipIndex+1}: ${clip.name}`;
+      document.querySelectorAll('#clipList > div').forEach(el=>el.classList.remove('bg-indigo-100'));
+      const currentEl = document.getElementById(`clip-${currentClipIndex}`);
+      if (currentEl) currentEl.classList.add('bg-indigo-100');
+      if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null; }
+      currentBlobUrl = URL.createObjectURL(clip);
       videoPlayer.src = currentBlobUrl;
-
       videoPlayer.oncanplaythrough = () => {
         videoPlayer.oncanplaythrough = null;
-
-        if (isInitial) {
-          if (!initAndStartRecorder()) {
-            recordingInProgress = false;
-            return;
-          }
-        } else if (mediaRecorder && mediaRecorder.state === 'recording') {
-          try {
-            const newStream = videoPlayer.captureStream();
-            if (newStream && recordingStream) {
-              recordingStream.getVideoTracks().forEach(t => { try { recordingStream.removeTrack(t); } catch {} });
-              newStream.getVideoTracks().forEach(t => { try { recordingStream.addTrack(t); } catch {} });
-              console.log("Stream updated for next clip.");
-            }
-          } catch (err) {
-            console.warn("Stream update failed", err);
-          }
-        }
-
-        videoPlayer.play().then(() => {
-          statusEl.textContent = `Playing Clip ${currentClipIndex + 1}`;
+        if (initial) initRecorder(); else switchStream();
+        videoPlayer.play().then(()=>{
           statusOverlay.style.opacity = '0';
           videoPlayer.style.opacity = '1';
-          if (mediaRecorder && mediaRecorder.state === 'paused') mediaRecorder.resume();
-        }).catch(err => {
-          console.error('Play error', err);
-          videoPlayer.onended();
-        });
+        }).catch(()=>videoPlayer.onended());
       };
-
       currentClipIndex++;
     }
 
-    videoPlayer.onended = async () => {
-      if (!recordingInProgress) return;
-      videoPlayer.pause();
-      videoPlayer.currentTime = 0;
-      videoPlayer.style.opacity = '0';
-      progressStatusEl.textContent = `Clip ${currentClipIndex} finished.`;
-
-      if (currentClipIndex >= videoQueue.length) {
-        progressStatusEl.textContent = "Finalizing...";
-        await new Promise(r => setTimeout(r, 400));
-        if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-        return;
-      }
-      setTimeout(() => playNextClip(), 200);
-    };
-
-    function initAndStartRecorder() {
+    function initRecorder() {
       recordingStream = videoPlayer.captureStream();
-      let options = { mimeType: 'video/webm; codecs="vp8, opus"' };
-      if (!MediaRecorder.isTypeSupported(options.mimeType)) options = { mimeType: 'video/webm' };
-      try {
-        mediaRecorder = new MediaRecorder(recordingStream, options);
-      } catch (err) {
-        console.error("Recorder setup failed:", err);
-        return false;
-      }
+      let opts = { mimeType: 'video/webm; codecs="vp8, opus"' };
+      if (!MediaRecorder.isTypeSupported(opts.mimeType)) opts = { mimeType: 'video/webm' };
+      mediaRecorder = new MediaRecorder(recordingStream, opts);
       mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
       mediaRecorder.onstop = handleRecordingStop;
       mediaRecorder.start(100);
       recordBtn.textContent = 'STOP RECORDING';
-      recordBtn.classList.replace('bg-red-500', 'bg-gray-500');
+      recordBtn.classList.replace('bg-red-500','bg-gray-500');
       recordingOverlay.classList.remove('hidden');
       downloadLink.classList.add('hidden');
-      return true;
+    }
+
+    function switchStream() {
+      try {
+        const newS = videoPlayer.captureStream();
+        recordingStream.getVideoTracks().forEach(t=>recordingStream.removeTrack(t));
+        newS.getVideoTracks().forEach(t=>recordingStream.addTrack(t));
+      } catch(e){ console.warn('Stream switch failed',e); }
+    }
+
+    function stopRecording() {
+      if (!mediaRecorder || mediaRecorder.state==='inactive') return;
+      try {
+        const ctx = document.createElement('canvas').getContext('2d');
+        ctx.canvas.width = 360; ctx.canvas.height = 640;
+        ctx.fillStyle = 'black'; ctx.fillRect(0,0,360,640);
+        const blk = ctx.canvas.captureStream(10);
+        const track = blk.getVideoTracks()[0];
+        recordingStream.addTrack(track);
+        setTimeout(()=>{
+          if (mediaRecorder.state!=='inactive') mediaRecorder.stop();
+          track.stop();
+        },300);
+      } catch(e){ console.warn('stop fallback',e); mediaRecorder.stop(); }
     }
 
     function handleRecordingStop() {
       recordingInProgress = false;
       recordBtn.textContent = '2. START COMPILATION RECORDING';
-      recordBtn.classList.replace('bg-gray-500', 'bg-red-500');
+      recordBtn.classList.replace('bg-gray-500','bg-red-500');
       recordingOverlay.classList.add('hidden');
-      videoPlayer.pause();
-      videoPlayer.src = "";
-      if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null; }
-      try {
-        if (recordingStream) {
-          recordingStream.getTracks().forEach(t => { try { t.stop(); } catch {} });
-          recordingStream = null;
-        }
-      } catch {}
-      const blob = new Blob(recordedChunks, { type: mediaRecorder && mediaRecorder.mimeType ? mediaRecorder.mimeType : 'video/webm' });
+      const blob = new Blob(recordedChunks,{type:'video/webm'});
       const url = URL.createObjectURL(blob);
       downloadLink.href = url;
-      downloadLink.download = `compilation_${Date.now()}.webm`;
+      downloadLink.download = `short_${Date.now()}.webm`;
       downloadLink.classList.remove('hidden');
-      progressStatusEl.textContent = `✅ Recording complete! File ready for download.`;
-      statusEl.textContent = 'Recording finished. Download below.';
+      statusEl.textContent = 'Recording finished. Uploading to Render...';
       statusOverlay.style.opacity = '1';
-      document.querySelectorAll('#clipList > div').forEach(el => el.classList.remove('bg-indigo-100'));
+      uploadShort(blob);
     }
 
-    recordBtn.addEventListener('click', () => {
-      if (recordingInProgress) stopRecording(); else startRecording();
-    });
+    recordBtn.onclick = ()=> recordingInProgress ? stopRecording() : startRecording();
+    function startRecording() { if (!videoQueue.length) return alert('Load clips first!'); recordedChunks=[]; currentClipIndex=0; recordingInProgress=true; playNextClip(true); }
 
-    function startRecording() {
-      if (!videoQueue.length) {
-        statusEl.textContent = "Please load video clips first!";
-        statusOverlay.style.opacity = '1';
-        return;
-      }
-      recordedChunks = [];
-      currentClipIndex = 0;
-      recordingInProgress = true;
-      playNextClip(true);
-    }
-
-    function stopRecording() {
-      if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
-      try {
-        const ctx = document.createElement('canvas').getContext('2d');
-        ctx.canvas.width = videoPlayer.videoWidth || 360;
-        ctx.canvas.height = videoPlayer.videoHeight || 640;
-        ctx.fillStyle = 'black';
-        ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-        const blackStream = ctx.canvas.captureStream(10);
-        const track = blackStream.getVideoTracks()[0];
-        recordingStream.addTrack(track);
-        setTimeout(() => {
-          if (mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-          track.stop();
-        }, 300);
-      } catch (err) {
-        console.warn("Final flush fallback failed:", err);
-        mediaRecorder.stop();
-      }
-    }
-
-    window.onload = () => statusOverlay.style.opacity = '1';
-
-    // ===================== Render Backend Integration =====================
-    const BACKEND_URL = "https://shorts-backend.onrender.com"; // <--- replace with your Render app URL
+    // ---------------- Render Backend Integration ----------------
+    const BACKEND_URL = "https://shorts-backend.onrender.com";
 
     async function uploadShort(blob) {
       try {
@@ -311,32 +210,31 @@
         formData.append("video", blob, `short_${Date.now()}.webm`);
         const res = await fetch(`${BACKEND_URL}/upload`, { method: "POST", body: formData });
         const data = await res.json();
-        console.log("Uploaded:", data.filename);
         let shorts = JSON.parse(localStorage.getItem("shorts") || "[]");
         shorts.push(data.filename);
         localStorage.setItem("shorts", JSON.stringify(shorts));
-      } catch (err) {
-        console.error("Upload failed:", err);
+        progressStatusEl.textContent = `✅ Uploaded: ${data.filename}`;
+      } catch (e) {
+        console.error("Upload failed:", e);
+        progressStatusEl.textContent = "❌ Upload failed. Try again.";
       }
     }
 
     async function mergeAllShorts() {
       const shorts = JSON.parse(localStorage.getItem("shorts") || "[]");
       if (!shorts.length) return alert("No saved shorts yet!");
-      progressStatusEl.textContent = "Merging all shorts, please wait...";
+      progressStatusEl.textContent = "Merging all shorts on Render...";
       try {
         const res = await fetch(`${BACKEND_URL}/merge`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {"Content-Type":"application/json"},
           body: JSON.stringify({ files: shorts })
         });
         if (!res.ok) throw new Error("Merge failed");
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
-        a.href = url;
-        a.download = `final_compilation_${Date.now()}.mp4`;
-        a.click();
+        a.href = url; a.download = `final_${Date.now()}.mp4`; a.click();
         progressStatusEl.textContent = "✅ Merged video downloaded!";
       } catch (err) {
         console.error("Merge error:", err);
@@ -349,13 +247,6 @@
     mergeBtn.className = "w-full px-4 py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-md hover:bg-indigo-700 mt-4";
     mergeBtn.onclick = mergeAllShorts;
     document.querySelector(".bg-white.p-6").appendChild(mergeBtn);
-
-    const originalHandleRecordingStop = handleRecordingStop;
-    handleRecordingStop = function() {
-      originalHandleRecordingStop.apply(this, arguments);
-      const blob = new Blob(recordedChunks, { type: mediaRecorder && mediaRecorder.mimeType ? mediaRecorder.mimeType : 'video/webm' });
-      uploadShort(blob);
-    };
   </script>
 </body>
 </html>
