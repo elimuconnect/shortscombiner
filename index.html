@@ -13,12 +13,43 @@
       flex-direction: column;
       align-items: center;
       padding: 2rem;
+      min-height: 100vh;
     }
-    h1 { margin-bottom: 1rem; color: #1976d2; }
-    input, button { margin: 0.5rem 0; padding: 0.5rem; font-size: 1rem; }
-    button { background: #1976d2; color: #fff; border: none; cursor: pointer; }
-    button:disabled { background: #555; cursor: not-allowed; }
-    #progress { width: 100%; margin-top: 1rem; }
+    h1 {
+      margin-bottom: 1rem;
+      color: #1976d2;
+      text-align: center;
+    }
+    input, button {
+      margin: 0.5rem 0;
+      padding: 0.5rem;
+      font-size: 1rem;
+      border-radius: 5px;
+      border: none;
+    }
+    button {
+      background: #1976d2;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:disabled {
+      background: #555;
+      cursor: not-allowed;
+    }
+    #progress {
+      width: 100%;
+      max-width: 400px;
+      margin-top: 1rem;
+    }
+    #downloadLink {
+      display: none;
+      margin-top: 1rem;
+      color: #0f1724;
+      background: #1976d2;
+      padding: 0.5rem 1rem;
+      border-radius: 5px;
+      text-decoration: none;
+    }
   </style>
 </head>
 <body>
@@ -27,10 +58,10 @@
   <input type="file" id="files" multiple accept="video/*">
   <button id="combineBtn" disabled>Combine Videos</button>
   <progress id="progress" value="0" max="100"></progress>
-  <a id="downloadLink" style="display:none; margin-top:1rem;">Download Combined Video</a>
+  <a id="downloadLink">Download Combined Video</a>
 
   <script type="module">
-    import { createFFmpeg, fetchFile } from './ffmpeg.min.js';
+    import { createFFmpeg, fetchFile } from 'https://unpkg.com/@ffmpeg/ffmpeg@0.11.0/dist/ffmpeg.min.js';
 
     const ffmpeg = createFFmpeg({ log: true });
     const filesInput = document.getElementById('files');
@@ -47,9 +78,10 @@
       progressEl.value = 0;
       downloadLink.style.display = 'none';
 
-      await ffmpeg.load();
+      if (!ffmpeg.isLoaded()) {
+        await ffmpeg.load();
+      }
 
-      // Write all selected files to ffmpeg FS
       const fileList = Array.from(filesInput.files).slice(0, 100);
       const txtList = [];
 
@@ -57,13 +89,11 @@
         const file = fileList[i];
         ffmpeg.FS('writeFile', file.name, await fetchFile(file));
         txtList.push(`file '${file.name}'`);
-        progressEl.value = ((i + 1) / fileList.length) * 50; // progress
+        progressEl.value = ((i + 1) / fileList.length) * 50;
       }
 
-      // Create a temporary file list for ffmpeg concat
       ffmpeg.FS('writeFile', 'filelist.txt', txtList.join('\n'));
 
-      // Run ffmpeg to concatenate
       await ffmpeg.run('-f', 'concat', '-safe', '0', '-i', 'filelist.txt', '-c', 'copy', 'output.mp4');
 
       const data = ffmpeg.FS('readFile', 'output.mp4');
@@ -80,4 +110,3 @@
   </script>
 </body>
 </html>
-
