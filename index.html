@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Shorts Combiner</title>
+  <title>Combine Shorts (GitHub Pages)</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -14,12 +14,12 @@
       align-items: center;
       padding: 2rem;
     }
-    h1 { margin-bottom: 1rem; color: #1976d2; }
+    h1 { color: #4fc3f7; margin-bottom: 1rem; }
     input, button { margin: 0.5rem 0; padding: 0.5rem; font-size: 1rem; }
-    button { background: #1976d2; color: #fff; border: none; cursor: pointer; }
+    button { background: #1976d2; color: white; border: none; cursor: pointer; }
     button:disabled { background: #555; cursor: not-allowed; }
     #progress { width: 100%; margin-top: 1rem; }
-    a { color: #0d47a1; text-decoration: underline; }
+    a { color: #00e676; text-decoration: underline; margin-top: 1rem; }
   </style>
 </head>
 <body>
@@ -28,17 +28,13 @@
   <input type="file" id="files" multiple accept="video/*">
   <button id="combineBtn" disabled>Combine Videos</button>
   <progress id="progress" value="0" max="100"></progress>
-  <a id="downloadLink" style="display:none; margin-top:1rem;"></a>
+  <a id="downloadLink" style="display:none"></a>
 
-  <script type="module">
-    import { createFFmpeg, fetchFile } from './ffmpeg.min.js';
-
-    // Point to your local wasm file
-    const ffmpeg = createFFmpeg({
-      log: true,
-      corePath: './ffmpeg-core.wasm'
-    });
-
+  <!-- Load FFmpeg.wasm UMD build (works on GitHub Pages) -->
+  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.3/dist/ffmpeg.min.js"></script>
+  <script>
+    const { createFFmpeg, fetchFile } = FFmpeg;
+    const ffmpeg = createFFmpeg({ log: true });
     const filesInput = document.getElementById('files');
     const combineBtn = document.getElementById('combineBtn');
     const progressEl = document.getElementById('progress');
@@ -83,4 +79,3 @@
   </script>
 </body>
 </html>
-
