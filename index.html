@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Shorts Combiner • FFmpeg.wasm</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shorts Combiner</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -12,91 +12,70 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: flex-start;
-      padding: 20px;
+      padding: 2rem;
     }
-    h1 {
-      color: #1976d2;
-    }
-    input, button {
-      padding: 10px;
-      margin: 10px;
-      font-size: 1rem;
-      border-radius: 5px;
-      border: none;
-    }
-    button {
-      background-color: #1976d2;
-      color: #fff;
-      cursor: pointer;
-    }
-    button:disabled {
-      background-color: #555;
-      cursor: not-allowed;
-    }
-    video {
-      margin-top: 20px;
-      max-width: 100%;
-      border: 2px solid #1976d2;
-      border-radius: 8px;
-    }
+    h1 { margin-bottom: 1rem; color: #1976d2; }
+    input, button { margin: 0.5rem 0; padding: 0.5rem; font-size: 1rem; }
+    button { background: #1976d2; color: #fff; border: none; cursor: pointer; }
+    button:disabled { background: #555; cursor: not-allowed; }
+    #progress { width: 100%; margin-top: 1rem; }
   </style>
 </head>
 <body>
-  <h1>Shorts Combiner (FFmpeg.wasm)</h1>
+  <h1>Combine Shorts (Up to 100)</h1>
 
-  <input type="file" id="files" multiple accept="video/*" />
-  <button id="combineBtn">Combine Videos</button>
-
-  <video id="outputVideo" controls></video>
+  <input type="file" id="files" multiple accept="video/*">
+  <button id="combineBtn" disabled>Combine Videos</button>
+  <progress id="progress" value="0" max="100"></progress>
+  <a id="downloadLink" style="display:none; margin-top:1rem;">Download Combined Video</a>
 
   <script type="module">
     import { createFFmpeg, fetchFile } from './ffmpeg.min.js';
 
-    const ffmpeg = createFFmpeg({
-      log: true,
-      corePath: './ffmpeg-core.wasm' // adjust if wasm is inside ffmpeg-core folder
+    const ffmpeg = createFFmpeg({ log: true });
+    const filesInput = document.getElementById('files');
+    const combineBtn = document.getElementById('combineBtn');
+    const progressEl = document.getElementById('progress');
+    const downloadLink = document.getElementById('downloadLink');
+
+    filesInput.addEventListener('change', () => {
+      combineBtn.disabled = filesInput.files.length === 0;
     });
 
-    const combineBtn = document.getElementById('combineBtn');
-    const filesInput = document.getElementById('files');
-    const outputVideo = document.getElementById('outputVideo');
-
     combineBtn.addEventListener('click', async () => {
-      if (filesInput.files.length === 0) {
-        alert('Please select some video files first.');
-        return;
-      }
-
       combineBtn.disabled = true;
-      combineBtn.textContent = 'Loading FFmpeg...';
+      progressEl.value = 0;
+      downloadLink.style.display = 'none';
 
-      if (!ffmpeg.isLoaded()) await ffmpeg.load();
+      await ffmpeg.load();
 
-      combineBtn.textContent = 'Combining videos...';
+      // Write all selected files to ffmpeg FS
+      const fileList = Array.from(filesInput.files).slice(0, 100);
+      const txtList = [];
 
-      // Write files to FFmpeg FS
-      for (let i = 0; i < filesInput.files.length; i++) {
-        ffmpeg.FS('writeFile', `input${i}.mp4`, await fetchFile(filesInput.files[i]));
+      for (let i = 0; i < fileList.length; i++) {
+        const file = fileList[i];
+        ffmpeg.FS('writeFile', file.name, await fetchFile(file));
+        txtList.push(`file '${file.name}'`);
+        progressEl.value = ((i + 1) / fileList.length) * 50; // progress
       }
 
-      // Create a text file listing inputs for concat
-      let listTxt = '';
-      for (let i = 0; i < filesInput.files.length; i++) {
-        listTxt += `file 'input${i}.mp4'\n`;
-      }
-      ffmpeg.FS('writeFile', 'fileList.txt', listTxt);
+      // Create a temporary file list for ffmpeg concat
+      ffmpeg.FS('writeFile', 'filelist.txt', txtList.join('\n'));
 
-      // Run FFmpeg concat command
-      await ffmpeg.run('-f', 'concat', '-safe', '0', '-i', 'fileList.txt', '-c', 'copy', 'output.mp4');
+      // Run ffmpeg to concatenate
+      await ffmpeg.run('-f', 'concat', '-safe', '0', '-i', 'filelist.txt', '-c', 'copy', 'output.mp4');
 
-      // Read output and display
       const data = ffmpeg.FS('readFile', 'output.mp4');
-      const videoBlob = new Blob([data.buffer], { type: 'video/mp4' });
-      outputVideo.src = URL.createObjectURL(videoBlob);
+      const url = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
 
+      downloadLink.href = url;
+      downloadLink.download = 'combined.mp4';
+      downloadLink.style.display = 'block';
+      downloadLink.textContent = 'Download Combined Video';
+
+      progressEl.value = 100;
       combineBtn.disabled = false;
-      combineBtn.textContent = 'Combine Videos';
     });
   </script>
 </body>
